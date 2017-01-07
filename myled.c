@@ -1,10 +1,10 @@
-
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <asm/uaccess.h>
 #include <linux/io.h>
+#include <linux/timer.h>
 
 MODULE_AUTHOR("KIU-CHI");
 MODULE_DESCRIPTION("driver for LED control");
@@ -17,17 +17,42 @@ static struct class *cls = NULL;
 
 static volatile u32 *gpio_base = NULL;
 
+void led_blink(unsigned long* data){
+	static int i = 0;
+	if(i == 0){
+		gpio_base[10] = 1 << 25;
+		i = 1;
+	}else{
+		gpio_base[7] = 1 << 25;
+		i = 0;
+	}
+}
+
+struct timer_list{
+	struct timer_list *next;
+	struct timer_list *prev;
+	unsigned long expires;
+	unsigned long data;
+	
+	void (*function)(unsigned long);
+};
+
 static ssize_t led_write(struct file* filp, const char* buf, size_t count, loff_t* pos)
 {
 	char c;
+	struct timer_list blink_timer;
+	blink_timer.expires = 10;
+	blink_timer.function = led_blink;
+	
 	if(copy_from_user(&c,buf,sizeof(char)))
 		return -EFAULT;
 
 	if(c == '0')
-		gpio_base[10] = 1 << 25;
+		//gpio_base[10] = 1 << 25;
+		add_timer(&blink_timer);
 	else if(c == '1')
-		gpio_base[7] = 1 << 25;
-
+		//gpio_base[7] = 1 << 25;
+		del_timer(&blink_timer);
         return 1;
 }
 
