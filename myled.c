@@ -1,8 +1,11 @@
 #include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <asm/uaccess.h>
+#include <asm/param.h>
 #include <linux/io.h>
 #include <linux/timer.h>
 
@@ -17,44 +20,46 @@ static struct class *cls = NULL;
 
 static volatile u32 *gpio_base = NULL;
 
+
 static void led_blink(unsigned long);
 
-static struct timer_list blink_timer = 
-{NULL, NULL, 0, 0, led_blink};
+static struct timer_list blink_timer;
 
 static int cycle = HZ;
-void led_blink(unsigned long data)
-{
-	static int i = 0;
-	
-	blink_timer.expires = jiffies + cycle;
-	blink_timer.data = i;
-	add_timer(&blink_timer);
-	if(i == 0){
-		gpio_base[10] = 1 << 25;
-		i = 1;
-	}else{
-		gpio_base[7] = 1 << 25;
-		i = 0;
-	}
-}
 
+static void led_blink(unsigned long data)
+{
+        static int i = 0;
+
+        if(i == 0){
+                gpio_base[7] = 1 << 25;
+                i = 1;
+        }else{
+                gpio_base[10] = 1 << 25;
+                i = 0;
+        }
+
+        blink_timer.expires = jiffies + cycle;
+        blink_timer.data = 0;
+        add_timer(&blink_timer);
+}
 static ssize_t led_write(struct file* filp, const char* buf, size_t count, loff_t* pos)
 {
-	char c;
-	
-	blink_timer.expires = jiffies + cycle;
-	blink_timer.data = 0; 
-	
-	if(copy_from_user(&c,buf,sizeof(char)))
-		return -EFAULT;
+        char c;
 
-	if(c == '0')
-		//gpio_base[10] = 1 << 25;
-		add_timer(&blink_timer);
-	else if(c == '1')
-		//gpio_base[7] = 1 << 25;
-		del_timer(&blink_timer);
+        init_timer(&blink_timer);
+        blink_timer.expires = jiffies + cycle;
+        blink_timer.data = 0;
+        blink_timer.function = &led_blink;
+
+        if(copy_from_user(&c,buf,sizeof(char)))
+                return -EFAULT;
+
+        if(c == '1'){
+                add_timer(&blink_timer);
+        }else if(c == '0'){
+                del_timer(&blink_timer);
+        }
         return 1;
 }
 
