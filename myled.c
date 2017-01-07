@@ -17,8 +17,19 @@ static struct class *cls = NULL;
 
 static volatile u32 *gpio_base = NULL;
 
-void led_blink(unsigned long* data){
+static void led_blink(unsigned long);
+
+static struct timer_list blink_timer = 
+{NULL, NULL, 0, 0, led_blink};
+
+static int cycle = HZ;
+void led_blink(unsigned long data)
+{
 	static int i = 0;
+	
+	blink_timer.expires = jiffies + cycle;
+	blink_timer.data = i;
+	add_timer(&blink_timer);
 	if(i == 0){
 		gpio_base[10] = 1 << 25;
 		i = 1;
@@ -28,21 +39,12 @@ void led_blink(unsigned long* data){
 	}
 }
 
-struct timer_list{
-	struct timer_list *next;
-	struct timer_list *prev;
-	unsigned long expires;
-	unsigned long data;
-	
-	void (*function)(unsigned long);
-};
-
 static ssize_t led_write(struct file* filp, const char* buf, size_t count, loff_t* pos)
 {
 	char c;
-	struct timer_list blink_timer;
-	blink_timer.expires = 10;
-	blink_timer.function = led_blink;
+	
+	blink_timer.expires = jiffies + cycle;
+	blink_timer.data = 0; 
 	
 	if(copy_from_user(&c,buf,sizeof(char)))
 		return -EFAULT;
